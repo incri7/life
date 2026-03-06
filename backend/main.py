@@ -339,9 +339,11 @@ def parse_life_md_constitution():
         if current_section == "none": continue
         
         # Matches "5:00", "05:00", "10:30"
-        time_match = re.search(r"(\d{1,2}:\d{2})\s+(.+)$", trimmed)
+        # Using a much more flexible regex to account for any whitespace/separator
+        time_match = re.search(r"(\d{1,2}[:.]\d{2})\s+(.+)$", trimmed)
         if time_match:
             time_str, activity = time_match.groups()
+            print(f"DEBUG: Found match - Time: {time_str}, Activity: {activity}")
             try:
                 parts = time_str.split(":")
                 h = int(parts[0])
@@ -365,7 +367,7 @@ def parse_life_md_constitution():
             except Exception as e:
                 print(f"DEBUG: Failed to parse time line '{trimmed}': {e}")
                 
-    print(f"DEBUG: Parsed {len(anchors)} anchors from life.md")
+    print(f"DEBUG: Parsed {len(anchors)} anchors from life.md total.")
     return anchors
 
 @app.get("/api/v1/daily/{username}/plan")
@@ -399,8 +401,12 @@ def manage_daily_plan(username: str, db: Session = Depends(get_db)):
         )
         db.add(new_task)
 
+    print(f"DEBUG: Seeded {len(anchors)} core anchors for user {username}")
+
     db.commit()
-    return db.query(models.Task).filter(models.Task.user_id == user.id).order_by(models.Task.time).all()
+    all_tasks = db.query(models.Task).filter(models.Task.user_id == user.id).order_by(models.Task.time).all()
+    print(f"DEBUG: Returning {len(all_tasks)} total tasks for user {username}")
+    return all_tasks
 
 
 @app.post("/api/v1/chat/{username}")
