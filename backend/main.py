@@ -18,9 +18,12 @@ models.Base.metadata.create_all(bind=engine)
 app = FastAPI(title="Life RPG API")
 
 # CORS
+frontend_url = os.getenv("FRONTEND_URL", "*")
+origins = [frontend_url] if frontend_url != "*" else ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In production, restrict this
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
