@@ -12,10 +12,21 @@ import datetime
 
 load_dotenv()
 
-# Initialize DB
-models.Base.metadata.create_all(bind=engine)
-
 app = FastAPI(title="Life RPG API")
+
+@app.on_event("startup")
+def startup_event():
+    # Initialize DB (In each forked worker reliably)
+    print("Startup: Creating database schema if not exists...")
+    models.Base.metadata.create_all(bind=engine)
+    
+    # Configure AI
+    api_key = os.getenv("VITE_GEMINI_API_KEY")
+    if api_key:
+        print("Startup: Configuring Gemini AI...")
+        genai.configure(api_key=api_key)
+    else:
+        print("Startup Warning: VITE_GEMINI_API_KEY not found in environment")
 
 # CORS
 frontend_url = os.getenv("FRONTEND_URL", "*")
@@ -37,8 +48,7 @@ def get_db():
     finally:
         db.close()
 
-# AI Configuration
-genai.configure(api_key=os.getenv("VITE_GEMINI_API_KEY"))
+# Startup logic handles database and AI configuration
 
 ORACLE_SYSTEM_PROMPT = """
 You are "The Oracle", an advanced Agentic AI Life Coach for the Life RPG application.
@@ -281,16 +291,24 @@ def delete_manual_task(username: str, task_time: str, db: Session = Depends(get_
 # ── AI-MANAGED SCHEDULING ──────────────────────────────────────────────────
 
 def parse_life_md_constitution():
-    """Parses public/life.md to get the core schedule anchors."""
+    """Parses life.md to get the core schedule anchors."""
     import os, re
     # Path is relative to backend/ (life.md is in repo root)
-    path = os.path.join(os.path.dirname(__file__), "..", "life.md")
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.join(base_dir, "..", "life.md")
+    
+    print(f"DEBUG: Attempting to parse life.md at: {os.path.abspath(path)}")
+    
     if not os.path.exists(path):
-        print(f"DEBUG: life.md not found at {path}")
+        print(f"ERROR: life.md not found at {path}")
         return []
     
-    with open(path, "r", encoding="utf-8") as f:
-        content = f.read()
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+    except Exception as e:
+        print(f"ERROR: Failed to read life.md: {e}")
+        return []
     
     lines = content.split("\n")
     anchors = []
@@ -301,35 +319,46 @@ def parse_life_md_constitution():
         if not trimmed: continue
         lower = trimmed.lower()
         
-        if "morning fixed anchors" in lower: current_section = "morning"
-        elif "post-office fixed anchors" in lower: current_section = "evening"
-        elif trimmed.startswith("#"): current_section = "none"
+        # Match actual headers in life.md
+        if "morning fixed anchors" in lower: 
+            current_section = "morning"
+            continue
+        elif "post-office fixed anchors" in lower: 
+            current_section = "evening"
+            continue
+        elif trimmed.startswith("#"): 
+            current_section = "none"
+            continue
         
         if current_section == "none": continue
         
-        # Matches "5:00" or "10:30" or "05:00"
-        time_match = re.match(r"^(\d{1,2}:\d{2})\s+(.+)$", trimmed)
+        # Matches "5:00", "05:00", "10:30"
+        time_match = re.search(r"(\d{1,2}:\d{2})\s+(.+)$", trimmed)
         if time_match:
             time_str, activity = time_match.groups()
-            parts = time_str.split(":")
-            h = int(parts[0])
-            m = int(parts[1])
-            
-            period = "Morning"
-            if h >= 12 and h < 17: period = "Afternoon"
-            elif h >= 17 or h < 4: period = "Evening"
-            
-            xp = 50
-            act_low = activity.lower()
-            if "skill building" in act_low or "exercise" in act_low: xp = 75
-            elif "screens off" in act_low or "sleep" in act_low: xp = 25
-            
-            anchors.append({
-                "time": f"{h:02d}:{m:02d}",
-                "activity": activity.strip(),
-                "xp": xp,
-                "period": period
-            })
+            try:
+                parts = time_str.split(":")
+                h = int(parts[0])
+                m = int(parts[1])
+                
+                period = "Morning"
+                if h >= 12 and h < 17: period = "Afternoon"
+                elif h >= 17 or h < 4: period = "Evening"
+                
+                xp = 50
+                act_low = activity.lower()
+                if "skill building" in act_low or "exercise" in act_low: xp = 75
+                elif "screens off" in act_low or "sleep" in act_low: xp = 25
+                
+                anchors.append({
+                    "time": f"{h:02d}:{m:02d}",
+                    "activity": activity.strip(),
+                    "xp": xp,
+                    "period": period
+                })
+            except Exception as e:
+                print(f"DEBUG: Failed to parse time line '{trimmed}': {e}")
+                
     print(f"DEBUG: Parsed {len(anchors)} anchors from life.md")
     return anchors
 
