@@ -75,6 +75,7 @@ OUTPUT FORMAT (JSON ONLY):
 """
 
 @app.get("/")
+@app.head("/")
 def read_root():
     return {"status": "Life RPG Online"}
 
@@ -294,10 +295,15 @@ def parse_life_md_constitution():
     """Parses life.md to get the core schedule anchors."""
     import os, re
     # Path is relative to backend/ (life.md is in repo root)
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    path = os.path.join(base_dir, "..", "life.md")
+    # On Render, the CWD is /opt/render/project/src/backend if started with 'cd backend'
+    # but the root is one level up.
+    path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "life.md"))
     
-    print(f"DEBUG: Attempting to parse life.md at: {os.path.abspath(path)}")
+    # Try alternate path if not found (direct root access)
+    if not os.path.exists(path):
+        path = os.path.abspath(os.path.join(os.getcwd(), "..", "life.md"))
+    
+    print(f"DEBUG: Attempting to parse life.md at: {path}")
     
     if not os.path.exists(path):
         print(f"ERROR: life.md not found at {path}")
