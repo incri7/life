@@ -634,18 +634,19 @@ export function Home() {
             </Box>
 
             {/* Oracle Chat Drawer */}
-            <Drawer isOpen={isOracleOpen} placement={isMobile ? "bottom" : "right"} onClose={onOracleClose} size={isMobile ? undefined : "md"}>
+            <Drawer isOpen={isOracleOpen} placement={isMobile ? "bottom" : "right"} onClose={onOracleClose} size={isMobile ? undefined : "md"} isFullHeight={false}>
                 <DrawerOverlay backdropFilter="blur(5px)" bg="blackAlpha.300" />
                 <DrawerContent
                     borderTopRadius={isMobile ? "3xl" : "none"}
                     maxW={isMobile ? "480px" : "400px"}
                     mx={isMobile ? "auto" : "0"}
                     bg={cardBg}
-                    h={isMobile ? "94vh" : "full"}
+                    h={isMobile ? "88vh" : "full"}
+                    mt={isMobile ? 10 : 0}
                     overflow="hidden"
-                    boxShadow="0 -10px 30px rgba(0,0,0,0.1)"
+                    boxShadow="0 -10px 40px rgba(0,0,0,0.2)"
                 >
-                    <DrawerHeader borderBottomWidth="1px" pt={isMobile ? 12 : 6} pb={6} bg={cardBg} position="relative" zIndex={200}>
+                    <DrawerHeader borderBottomWidth="1px" pt={isMobile ? 20 : 6} pb={6} bg={cardBg} position="relative" zIndex={200}>
                         <HStack justify="space-between" align="center">
                             <HStack>
                                 <Circle size="3" bg="green.400" className="pulse-animation" />
@@ -653,13 +654,13 @@ export function Home() {
                             </HStack>
                             <IconButton
                                 icon={<FiX />}
-                                variant="ghost"
-                                color="gray.500"
+                                variant="solid"
+                                colorScheme="gray"
                                 onClick={onOracleClose}
                                 aria-label="Close"
                                 size="lg"
-                                bg="gray.50"
-                                _hover={{ bg: "gray.100" }}
+                                borderRadius="xl"
+                                shadow="md"
                             />
                         </HStack>
                     </DrawerHeader>
