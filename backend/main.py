@@ -50,29 +50,15 @@ def get_db():
 
 # Startup logic handles database and AI configuration
 
-ORACLE_SYSTEM_PROMPT = """
-You are "The Oracle", an advanced Agentic AI Life Coach for the Life RPG application.
-Your goal is to help the user master their life through discipline and gamification.
+def get_system_prompt():
+    """Reads the system_prompt.md file from the project root."""
+    path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "system_prompt.md"))
+    if not os.path.exists(path):
+        return "You are 'The Oracle', an advanced Agentic AI Life Coach."
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read()
 
-CORE CAPABILITIES:
-1. REASONING: Analyze the user's schedule, XP level, and current performance.
-2. ADAPTATION: Reschedule, edit, or delete tasks based on user intent.
-3. MOTIVATION: Speak in a professional, encouraging, and slightly technical/tactical tone.
-
-INPUT DATA:
-- Current Schedule, User Status (Level, XP, Completed Quests).
-
-OUTPUT FORMAT (JSON ONLY):
-{
-  "message": "Your tactical response to the user",
-  "action": "none" | "accelerate" | "defer" | "add_xp" | "schedule_task" | "delete_task" | "edit_task",
-  "actionData": {
-    "activity": "Name", "time": "HH:MM", "type": "fixed", "xp": 100
-  } OR an array of these objects for bulk creation, deletion, or edits.
-  For edit_task, use: { "target_time": "HH:MM", "new_time": "HH:MM", "new_activity": "Name" }
-  For delete_task, use: { "time": "HH:MM" }
-}
-"""
+ORACLE_SYSTEM_PROMPT = get_system_prompt()
 
 @app.get("/")
 @app.head("/")
@@ -291,29 +277,25 @@ def delete_manual_task(username: str, task_time: str, db: Session = Depends(get_
 
 # ── AI-MANAGED SCHEDULING ──────────────────────────────────────────────────
 
-def parse_life_md_constitution():
-    """Parses life.md to get the core schedule anchors."""
+def parse_knowledge_base():
+    """Parses knowledge_base.md to get the core schedule anchors."""
     import os, re
-    # Path is relative to backend/ (life.md is in repo root)
-    # On Render, the CWD is /opt/render/project/src/backend if started with 'cd backend'
-    # but the root is one level up.
-    path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "life.md"))
-    
-    # Try alternate path if not found (direct root access)
-    if not os.path.exists(path):
-        path = os.path.abspath(os.path.join(os.getcwd(), "..", "life.md"))
-    
-    print(f"DEBUG: Attempting to parse life.md at: {path}")
+    path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "knowledge_base.md"))
     
     if not os.path.exists(path):
-        print(f"ERROR: life.md not found at {path}")
+        path = os.path.abspath(os.path.join(os.getcwd(), "..", "knowledge_base.md"))
+    
+    print(f"DEBUG: Attempting to parse knowledge_base.md at: {path}")
+    
+    if not os.path.exists(path):
+        print(f"ERROR: knowledge_base.md not found at {path}")
         return []
     
     try:
         with open(path, "r", encoding="utf-8") as f:
             content = f.read()
     except Exception as e:
-        print(f"ERROR: Failed to read life.md: {e}")
+        print(f"ERROR: Failed to read knowledge_base.md: {e}")
         return []
     
     lines = content.split("\n")
@@ -325,22 +307,19 @@ def parse_life_md_constitution():
         if not trimmed: continue
         lower = trimmed.lower()
         
-        # Match actual headers in life.md
-        if "morning fixed anchors" in lower: 
-            current_section = "morning"
+        # Match Fixed Anchors header in knowledge_base.md
+        if "fixed anchors" in lower: 
+            current_section = "anchors"
             continue
-        elif "post-office fixed anchors" in lower: 
-            current_section = "evening"
-            continue
-        elif trimmed.startswith("#"): 
+        elif trimmed.startswith("##") and current_section == "anchors": 
             current_section = "none"
             continue
         
         if current_section == "none": continue
         
-        # Matches "5:00", "05:00", "10:30"
-        # Using a much more flexible regex to account for any whitespace/separator
-        time_match = re.search(r"(\d{1,2}[:.]\d{2})\s+(.+)$", trimmed)
+        # Matches "- **05:00**: Activity" or "- **05:00** Activity" or "05:00 Activity"
+        # The user updated it to "- **HH:MM**: Activity"
+        time_match = re.search(r"(\d{1,2}:\d{2})\*\*?[:\s]+(.+)$", trimmed)
         if time_match:
             time_str, activity = time_match.groups()
             print(f"DEBUG: Found match - Time: {time_str}, Activity: {activity}")
@@ -355,8 +334,9 @@ def parse_life_md_constitution():
                 
                 xp = 50
                 act_low = activity.lower()
-                if "skill building" in act_low or "exercise" in act_low: xp = 75
-                elif "screens off" in act_low or "sleep" in act_low: xp = 25
+                if "gym" in act_low or "exercise" in act_low: xp = 75
+                elif "productive time" in act_low or "certification" in act_low: xp = 100
+                elif "sleep" in act_low: xp = 25
                 
                 anchors.append({
                     "time": f"{h:02d}:{m:02d}",
@@ -367,7 +347,7 @@ def parse_life_md_constitution():
             except Exception as e:
                 print(f"DEBUG: Failed to parse time line '{trimmed}': {e}")
                 
-    print(f"DEBUG: Parsed {len(anchors)} anchors from life.md total.")
+    print(f"DEBUG: Parsed {len(anchors)} anchors from knowledge_base.md total.")
     return anchors
 
 @app.get("/api/v1/daily/{username}/plan")
@@ -381,7 +361,7 @@ def manage_daily_plan(username: str, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
         
-    anchors = parse_life_md_constitution()
+    anchors = parse_knowledge_base()
     
     # 1. Clear old core anchors (to handle healing and stale resets)
     db.query(models.Task).filter(
@@ -420,7 +400,7 @@ async def chat_with_oracle(username: str, user_input: str = Body(..., embed=True
     
     # Oracle Reasoning
     state_context = f"Level: {user.level}, XP: {user.xp}, Tasks: {[t.activity for t in user.tasks if not t.completed]}"
-    full_prompt = f"{ORACLE_SYSTEM_PROMPT}\n\nUSER STATE: {state_context}\nUSER MESSAGE: {user_input}\n\nReturn JSON."
+    full_prompt = f"{get_system_prompt()}\n\nUSER STATE: {state_context}\nUSER MESSAGE: {user_input}\n\nReturn JSON."
     
     try:
         model = genai.GenerativeModel('gemini-2.5-flash')
