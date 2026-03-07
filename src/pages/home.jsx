@@ -66,7 +66,11 @@ export function Home() {
     const [schedule, setSchedule] = useState({ fixed: [], flexible: [] })
     const [activeQuest, setActiveQuest] = useState(null)
     const { isOpen: isOracleOpen, onOpen: onOracleOpen, onClose: onOracleClose } = useDisclosure()
-    const { isOpen: isTaskOpen, onOpen: onTaskOpen, onClose: onTaskClose } = useDisclosure()
+    const [isTaskOpen, setIsTaskOpen] = useState(false)
+    const onTaskOpen = () => setIsTaskOpen(true)
+    const onTaskClose = () => setIsTaskOpen(false)
+
+    const [isLoading, setIsLoading] = useState(true)
     const [editingTask, setEditingTask] = useState(null)
     const [taskForm, setTaskForm] = useState({ time: '12:00', activity: '', xp: 50, is_custom: true })
     const [isThinking, setIsThinking] = useState(false)
@@ -137,9 +141,11 @@ export function Home() {
 
                 // Find next incomplete quest (Uses sorted planData)
                 const nextQuest = planData.find(q => !dailyData.map(d => d.task_time).includes(q.time))
-                setActiveQuest(nextQuest || planData[0])
+                setActiveQuest(nextQuest || planData[0] || null)
+                setIsLoading(false)
             } catch (err) {
                 console.error("Hydration Error:", err)
+                setIsLoading(false)
             }
         }
         hydrate()
@@ -330,13 +336,27 @@ export function Home() {
             const mStr = now.getMinutes().toString().padStart(2, '0')
             const currentStr = `${hStr}:${mStr}`
 
-            let currentTask = allFixedTasks[0]
-            for (const t of allFixedTasks) {
-                if (t.time <= currentStr) currentTask = t
-                else break
+            // Intelligent Focus: 
+            // 1. Find the most recent task that should have started but isn't completed.
+            // 2. If all past tasks are done, show the first upcoming incomplete task.
+            const incompleteTasks = allFixedTasks.filter(t => !completedQuests.includes(t.time))
+
+            if (incompleteTasks.length === 0) {
+                // If everything is done, just show the last overall task or first as anchor
+                setActiveQuest(allFixedTasks[allFixedTasks.length - 1] || allFixedTasks[0])
+                return
             }
 
-            setActiveQuest(prev => prev?.time !== currentTask.time ? currentTask : prev)
+            // Find first incomplete task that is in the past (the one we should be doing NOW)
+            const pastIncomplete = [...incompleteTasks].reverse().find(t => t.time <= currentStr)
+
+            // Find first incomplete task that is in the future (the next one coming up)
+            const nextIncomplete = incompleteTasks.find(t => t.time > currentStr)
+
+            // Decision: If we have an overdue task, focus on it. Otherwise, show what's next.
+            const targetTask = pastIncomplete || nextIncomplete || incompleteTasks[0]
+
+            setActiveQuest(prev => prev?.time !== targetTask.time ? targetTask : prev)
         }
 
         syncFocusTime()
@@ -407,7 +427,16 @@ export function Home() {
     )
 
     return (
-        <Box minH="100vh" bg={bgColor} display="flex">
+        <Box minH="100vh" bg={bgColor} display="flex" position="relative">
+            {isLoading && (
+                <Box position="fixed" inset={0} bg="blackAlpha.800" backdropFilter="blur(10px)" zIndex={1000} display="flex" alignItems="center" justifyContent="center">
+                    <VStack spacing={4}>
+                        <Circle size="60px" border="4px solid" borderColor="blue.500" borderTopColor="transparent" className="spin-animation" />
+                        <Text color="white" fontWeight="900" letterSpacing="2px">SYNCING WITH ORACLE...</Text>
+                        <Text color="gray.500" fontSize="xs">If this takes too long, check your API_BASE configuration.</Text>
+                    </VStack>
+                </Box>
+            )}
             {/* Desktop Sidebar */}
             <Box w={sidebarWidth} display={{ base: "none", lg: "block" }} position="fixed" h="100vh" zIndex={200}>
                 <SidebarContent />
