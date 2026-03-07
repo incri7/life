@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("e2f1a0b9-c8d7-4e6f-ac5b-4d3c2b1a0e9f") # DATABASE_URL
+DATABASE_URL = os.getenv("X_e2f1a0b9_c8d7_4e6f_ac5b_4d3c2b1a0e9f") # DATABASE_URL
 
 # Render/Heroku sometimes provide "postgres://" which SQLAlchemy 1.4+ doesn't support.
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):

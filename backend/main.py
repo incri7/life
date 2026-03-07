@@ -21,15 +21,15 @@ def startup_event():
     models.Base.metadata.create_all(bind=engine)
     
     # Configure AI
-    api_key = os.getenv("3f92e8a1-c4d5-4b6a-8e7f-9d0c1b2a3a4b") # VITE_GEMINI_API_KEY
+    api_key = os.getenv("X_3f92e8a1_c4d5_4b6a_8e7f_9d0c1b2a3a4b") # VITE_GEMINI_API_KEY
     if api_key:
         print("Startup: Configuring Gemini AI...")
         genai.configure(api_key=api_key)
     else:
-        print("Startup Warning: 3f92e8a1-c4d5-4b6a-8e7f-9d0c1b2a3a4b not found in environment")
+        print("Startup Warning: X_3f92e8a1_c4d5_4b6a_8e7f_9d0c1b2a3a4b not found in environment")
 
 # CORS
-frontend_url = os.getenv("b9e8d7c6-a5b4-4321-8765-4d3c2b1a0e9f", "*") # FRONTEND_URL
+frontend_url = os.getenv("X_b9e8d7c6_a5b4_4321_8765_4d3c2b1a0e9f", "*") # FRONTEND_URL
 origins = [frontend_url] if frontend_url != "*" else ["*"]
 
 app.add_middleware(
