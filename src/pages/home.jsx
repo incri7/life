@@ -634,17 +634,18 @@ export function Home() {
             </Box>
 
             {/* Oracle Chat Drawer */}
-            <Drawer isOpen={isOracleOpen} placement={isMobile ? "bottom" : "right"} onClose={onOracleClose} size={isMobile ? "full" : "md"}>
+            <Drawer isOpen={isOracleOpen} placement={isMobile ? "bottom" : "right"} onClose={onOracleClose} size={isMobile ? undefined : "md"}>
                 <DrawerOverlay backdropFilter="blur(5px)" bg="blackAlpha.300" />
                 <DrawerContent
                     borderTopRadius={isMobile ? "3xl" : "none"}
                     maxW={isMobile ? "480px" : "400px"}
                     mx={isMobile ? "auto" : "0"}
                     bg={cardBg}
-                    mt="env(safe-area-inset-top)"
+                    h={isMobile ? "94vh" : "full"}
                     overflow="hidden"
+                    boxShadow="0 -10px 30px rgba(0,0,0,0.1)"
                 >
-                    <DrawerHeader borderBottomWidth="1px" pt={isMobile ? 20 : 6} pb={6} bg={cardBg}>
+                    <DrawerHeader borderBottomWidth="1px" pt={isMobile ? 12 : 6} pb={6} bg={cardBg} position="relative" zIndex={200}>
                         <HStack justify="space-between" align="center">
                             <HStack>
                                 <Circle size="3" bg="green.400" className="pulse-animation" />
@@ -657,6 +658,8 @@ export function Home() {
                                 onClick={onOracleClose}
                                 aria-label="Close"
                                 size="lg"
+                                bg="gray.50"
+                                _hover={{ bg: "gray.100" }}
                             />
                         </HStack>
                     </DrawerHeader>
