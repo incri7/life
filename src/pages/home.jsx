@@ -637,11 +637,11 @@ export function Home() {
             <Drawer isOpen={isOracleOpen} placement={isMobile ? "bottom" : "right"} onClose={onOracleClose} size={isMobile ? "full" : "md"}>
                 <DrawerOverlay backdropFilter="blur(5px)" bg="blackAlpha.300" />
                 <DrawerContent borderTopRadius={isMobile ? "3xl" : "none"} maxW={isMobile ? "480px" : "400px"} mx={isMobile ? "auto" : "0"}>
-                    <DrawerCloseButton />
-                    <DrawerHeader borderBottomWidth="1px" py={6} bg={cardBg}>
+                    <DrawerCloseButton top={isMobile ? "20px" : "8px"} />
+                    <DrawerHeader borderBottomWidth="1px" pt={isMobile ? 12 : 6} pb={6} bg={cardBg}>
                         <HStack><Circle size="3" bg="green.400" className="pulse-animation" /><Heading size="md" fontWeight="900">Oracle HUD</Heading></HStack>
                     </DrawerHeader>
-                    <DrawerBody p={0} display="flex" flexDirection="column" h="100vh" bg={cardBg}>
+                    <DrawerBody p={0} display="flex" flexDirection="column" bg={cardBg} overflow="hidden" flex={1}>
                         <Box flex={1} overflowY="auto" p={6} display="flex" flexDirection="column" gap={4}>
                             {messages.map((m, i) => (
                                 <Box key={i} display="flex" justifyContent={m.sender === 'user' ? 'flex-end' : 'flex-start'}>
