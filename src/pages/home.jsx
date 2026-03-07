@@ -641,26 +641,26 @@ export function Home() {
                     maxW={isMobile ? "480px" : "400px"}
                     mx={isMobile ? "auto" : "0"}
                     bg={cardBg}
-                    h={isMobile ? "94vh" : "full"}
-                    mt={isMobile ? 4 : 0}
+                    h={isMobile ? "88vh" : "full"}
+                    mt={isMobile ? 10 : 0}
                     overflow="hidden"
-                    boxShadow="0 -10px 40px rgba(0,0,0,0.15)"
+                    boxShadow="0 -10px 40px rgba(0,0,0,0.2)"
                 >
-                    <DrawerHeader borderBottomWidth="1px" pt={isMobile ? 8 : 6} pb={6} bg={cardBg} position="relative" zIndex={200}>
+                    <DrawerHeader borderBottomWidth="1px" pt={isMobile ? 20 : 6} pb={6} bg={cardBg} position="relative" zIndex={200}>
                         <HStack justify="space-between" align="center">
                             <HStack>
                                 <Circle size="3" bg="green.400" className="pulse-animation" />
-                                <Heading size="md" fontWeight="900" letterSpacing="-0.5px">Oracle HUD</Heading>
+                                <Heading size="md" fontWeight="900">Oracle HUD</Heading>
                             </HStack>
                             <IconButton
                                 icon={<FiX />}
-                                variant="ghost"
-                                color="gray.400"
+                                variant="solid"
+                                colorScheme="gray"
                                 onClick={onOracleClose}
                                 aria-label="Close"
-                                size="md"
-                                borderRadius="full"
-                                _hover={{ bg: "gray.50", color: "blue.500" }}
+                                size="lg"
+                                borderRadius="xl"
+                                shadow="md"
                             />
                         </HStack>
                     </DrawerHeader>
