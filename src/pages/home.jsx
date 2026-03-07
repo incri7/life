@@ -636,8 +636,14 @@ export function Home() {
             {/* Oracle Chat Drawer */}
             <Drawer isOpen={isOracleOpen} placement={isMobile ? "bottom" : "right"} onClose={onOracleClose} size={isMobile ? "full" : "md"}>
                 <DrawerOverlay backdropFilter="blur(5px)" bg="blackAlpha.300" />
-                <DrawerContent borderTopRadius={isMobile ? "3xl" : "none"} maxW={isMobile ? "480px" : "400px"} mx={isMobile ? "auto" : "0"}>
-                    <DrawerCloseButton top={isMobile ? "20px" : "8px"} />
+                <DrawerContent
+                    borderTopRadius={isMobile ? "3xl" : "none"}
+                    maxW={isMobile ? "480px" : "400px"}
+                    mx={isMobile ? "auto" : "0"}
+                    pt="env(safe-area-inset-top)"
+                    bg={cardBg}
+                >
+                    <DrawerCloseButton top={isMobile ? "24px" : "8px"} right={isMobile ? "24px" : "8px"} zIndex={150} />
                     <DrawerHeader borderBottomWidth="1px" pt={isMobile ? 12 : 6} pb={6} bg={cardBg}>
                         <HStack><Circle size="3" bg="green.400" className="pulse-animation" /><Heading size="md" fontWeight="900">Oracle HUD</Heading></HStack>
                     </DrawerHeader>
