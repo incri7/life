@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("X_e2f1a0b9_c8d7_4e6f_ac5b_4d3c2b1a0e9f") # DATABASE_URL
+DATABASE_URL = os.getenv("VITE_X_e2f1a0b9_c8d7_4e6f_ac5b_4d3c2b1a0e9f") # DATABASE_URL
 
 if not DATABASE_URL:
     print("WARNING: DATABASE_URL (X_e2f1a0b9_c8d7_4e6f_ac5b_4d3c2b1a0e9f) not set. Falling back to local SQLite.")

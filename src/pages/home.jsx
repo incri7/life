@@ -51,7 +51,7 @@ import { getOracleResponse } from '../utils/oracleAgent'
 
 const MotionBox = motion.create(Box)
 
-const API_BASE = import.meta.env["X_7ea54382_7b12_4f3d_9c3a_1e4d5f6a7b8c"] || "http://localhost:8000/api/v1"
+const API_BASE = import.meta.env["VITE_X_7ea54382_7b12_4f3d_9c3a_1e4d5f6a7b8c"] || "http://localhost:8000/api/v1"
 const USERNAME = "incri"
 
 export function Home() {

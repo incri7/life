@@ -18,10 +18,10 @@ def setup():
 
     # 2. Update .env file
     env_content = f"""# Life RPG Backend Configuration
-X_e2f1a0b9_c8d7_4e6f_ac5b_4d3c2b1a0e9f=sqlite:///./life_rpg.db
+VITE_X_e2f1a0b9_c8d7_4e6f_ac5b_4d3c2b1a0e9f=sqlite:///./life_rpg.db
 
 # Gemini API Key (Copied from local dev)
-X_3f92e8a1_c4d5_4b6a_8e7f_9d0c1b2a3a4b=AIzaSyB1uXY16Jpu37Fh2-PCradoOGexkbpGTW8
+VITE_X_3f92e8a1_c4d5_4b6a_8e7f_9d0c1b2a3a4b=AIzaSyB1uXY16Jpu37Fh2-PCradoOGexkbpGTW8
 """
     
     with open(".env", "w") as f:

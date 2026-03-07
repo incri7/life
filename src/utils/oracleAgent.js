@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const genAI = new GoogleGenerativeAI(import.meta.env["X_3f92e8a1_c4d5_4b6a_8e7f_9d0c1b2a3a4b"]);
+const genAI = new GoogleGenerativeAI(import.meta.env["VITE_X_3f92e8a1_c4d5_4b6a_8e7f_9d0c1b2a3a4b"]);
 
 const SYSTEM_PROMPT = `
 You are "The Oracle", an advanced Agentic AI Life Coach for the Life RPG application.

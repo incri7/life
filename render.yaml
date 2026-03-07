@@ -5,9 +5,9 @@ services:
     buildCommand: pip install -r backend/requirements.txt
     startCommand: cd backend && gunicorn -w 4 -k uvicorn.workers.UvicornWorker main:app --bind 0.0.0.0:$PORT
     envVars:
-      - key: X_e2f1a0b9_c8d7_4e6f_ac5b_4d3c2b1a0e9f
+      - key: VITE_X_e2f1a0b9_c8d7_4e6f_ac5b_4d3c2b1a0e9f
         sync: false
-      - key: X_3f92e8a1_c4d5_4b6a_8e7f_9d0c1b2a3a4b
+      - key: VITE_X_3f92e8a1_c4d5_4b6a_8e7f_9d0c1b2a3a4b
         sync: false
-      - key: X_b9e8d7c6_a5b4_4321_8765_4d3c2b1a0e9f
+      - key: VITE_X_b9e8d7c6_a5b4_4321_8765_4d3c2b1a0e9f
         value: "*"
