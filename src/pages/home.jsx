@@ -640,14 +640,27 @@ export function Home() {
                     borderTopRadius={isMobile ? "3xl" : "none"}
                     maxW={isMobile ? "480px" : "400px"}
                     mx={isMobile ? "auto" : "0"}
-                    pt="env(safe-area-inset-top)"
                     bg={cardBg}
+                    mt="env(safe-area-inset-top)"
+                    overflow="hidden"
                 >
-                    <DrawerCloseButton top={isMobile ? "24px" : "8px"} right={isMobile ? "24px" : "8px"} zIndex={150} />
-                    <DrawerHeader borderBottomWidth="1px" pt={isMobile ? 12 : 6} pb={6} bg={cardBg}>
-                        <HStack><Circle size="3" bg="green.400" className="pulse-animation" /><Heading size="md" fontWeight="900">Oracle HUD</Heading></HStack>
+                    <DrawerHeader borderBottomWidth="1px" pt={isMobile ? 20 : 6} pb={6} bg={cardBg}>
+                        <HStack justify="space-between" align="center">
+                            <HStack>
+                                <Circle size="3" bg="green.400" className="pulse-animation" />
+                                <Heading size="md" fontWeight="900">Oracle HUD</Heading>
+                            </HStack>
+                            <IconButton
+                                icon={<FiX />}
+                                variant="ghost"
+                                color="gray.500"
+                                onClick={onOracleClose}
+                                aria-label="Close"
+                                size="lg"
+                            />
+                        </HStack>
                     </DrawerHeader>
-                    <DrawerBody p={0} display="flex" flexDirection="column" bg={cardBg} overflow="hidden" flex={1}>
+                    <DrawerBody p={0} display="flex" flexDirection="column" bg={cardBg} flex={1}>
                         <Box flex={1} overflowY="auto" p={6} display="flex" flexDirection="column" gap={4}>
                             {messages.map((m, i) => (
                                 <Box key={i} display="flex" justifyContent={m.sender === 'user' ? 'flex-end' : 'flex-start'}>
