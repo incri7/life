@@ -125,23 +125,115 @@ def toggle_task(username: str, payload: ToggleTaskRequest, db: Session = Depends
 
 @app.get("/api/v1/daily/{username}")
 def get_today_completions(username: str, db: Session = Depends(get_db)):
-    """Return list of task_times completed today."""
+    """Return list of tasks with their execution state for today."""
     user = db.query(models.User).filter(models.User.username == username).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     today = datetime.date.today()
     logs = db.query(models.DailyLog).filter(
         models.DailyLog.user_id == user.id,
-        models.DailyLog.date == today,
-        models.DailyLog.completed == True
+        models.DailyLog.date == today
     ).all()
-    return [{"task_time": l.task_time, "task_activity": l.task_activity, "task_xp": l.task_xp} for l in logs]
+    return [{
+        "task_time": l.task_time,
+        "task_activity": l.task_activity,
+        "task_xp": l.task_xp,
+        "xp_earned": l.xp_earned,
+        "status": l.status,
+        "executed_at": l.executed_at.isoformat() if l.executed_at else None,
+        "completed_at": l.completed_at.isoformat() if l.completed_at else None,
+        "time_diff_minutes": l.time_diff_minutes,
+        "completed": l.status == "completed"
+    } for l in logs]
 
-@app.post("/api/v1/daily/{username}/toggle")
-def toggle_daily_task(username: str, payload: ToggleTaskRequest, db: Session = Depends(get_db)):
-    """Toggle a task's completion for today. Adds XP on complete, removes on undo."""
+
+def calculate_fair_xp(base_xp: int, scheduled_time: str, completed_at: datetime.datetime) -> int:
+    """Fair XP calculation based on how close completion is to scheduled time.
+    
+    - Within ±15 min: 100% XP
+    - 15-30 min off: 80% XP
+    - 30-60 min off: 50% XP  
+    - 60-120 min off: 20% XP
+    - >120 min off: 0 XP
+    """
+    try:
+        h, m = map(int, scheduled_time.split(':'))
+        scheduled_dt = completed_at.replace(hour=h, minute=m, second=0, microsecond=0)
+        diff_minutes = abs((completed_at - scheduled_dt).total_seconds() / 60)
+        
+        if diff_minutes <= 15:
+            multiplier = 1.0
+        elif diff_minutes <= 30:
+            multiplier = 0.8
+        elif diff_minutes <= 60:
+            multiplier = 0.5
+        elif diff_minutes <= 120:
+            multiplier = 0.2
+        else:
+            multiplier = 0.0
+        
+        earned = int(base_xp * multiplier)
+        return earned, diff_minutes, (completed_at - scheduled_dt).total_seconds() / 60
+    except Exception as e:
+        print(f"Fair XP calc error: {e}")
+        return base_xp, 0, 0
+
+
+@app.post("/api/v1/daily/{username}/execute")
+def execute_task(username: str, payload: ToggleTaskRequest, db: Session = Depends(get_db)):
+    """Mark a task as started (executing). Records the execution timestamp."""
     user = db.query(models.User).filter(models.User.username == username).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
     today = datetime.date.today()
+    now = datetime.datetime.now()
+    
+    # Check if already exists for today
+    log = db.query(models.DailyLog).filter(
+        models.DailyLog.user_id == user.id,
+        models.DailyLog.task_time == payload.time,
+        models.DailyLog.date == today
+    ).first()
+    
+    if log and log.status in ["executing", "completed"]:
+        return {
+            "status": "already_executing",
+            "executed_at": log.executed_at.isoformat() if log.executed_at else None,
+            "message": "Task is already in progress or completed."
+        }
+    
+    if not log:
+        log = models.DailyLog(
+            user_id=user.id,
+            task_time=payload.time,
+            task_activity=payload.activity,
+            task_xp=payload.xp,
+            date=today,
+            completed=False,
+            status="executing",
+            executed_at=now
+        )
+        db.add(log)
+    else:
+        log.status = "executing"
+        log.executed_at = now
+    
+    db.commit()
+    return {
+        "status": "executing",
+        "executed_at": now.isoformat(),
+        "message": "Task execution started."
+    }
+
+
+@app.post("/api/v1/daily/{username}/complete")
+def complete_task(username: str, payload: ToggleTaskRequest, db: Session = Depends(get_db)):
+    """Mark a task as completed. Calculates fair XP based on timing."""
+    user = db.query(models.User).filter(models.User.username == username).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    today = datetime.date.today()
+    now = datetime.datetime.now()
     
     log = db.query(models.DailyLog).filter(
         models.DailyLog.user_id == user.id,
@@ -149,30 +241,55 @@ def toggle_daily_task(username: str, payload: ToggleTaskRequest, db: Session = D
         models.DailyLog.date == today
     ).first()
     
-    if log:
-        # Undo: remove log entry and subtract XP
-        db.delete(log)
-        user.xp = max(0, user.xp - payload.xp)
-        completed = False
-    else:
-        # Complete: add log entry and add XP
-        log = models.DailyLog(
-            user_id=user.id,
-            task_time=payload.time,
-            task_activity=payload.activity,
-            task_xp=payload.xp,
-            date=today,
-            completed=True
-        )
-        db.add(log)
-        user.xp += payload.xp
-        completed = True
+    if not log or log.status != "executing":
+        raise HTTPException(status_code=400, detail="Task must be executed first before completing.")
+    
+    if log.status == "completed":
+        return {
+            "status": "already_completed",
+            "message": "Task was already completed."
+        }
+    
+    # Calculate fair XP
+    earned_xp, abs_diff, signed_diff = calculate_fair_xp(payload.xp, payload.time, now)
+    
+    log.status = "completed"
+    log.completed = True
+    log.completed_at = now
+    log.xp_earned = earned_xp
+    log.time_diff_minutes = round(signed_diff, 1)
+    
+    # Award the fairly calculated XP
+    user.xp += earned_xp
     
     # Level Up Logic
     new_level = int((user.xp / 100)**0.5) + 1
     user.level = new_level
+    
     db.commit()
-    return {"status": "updated", "completed": completed, "xp": user.xp, "level": user.level}
+    
+    # Determine early/late feedback
+    if signed_diff < -5:
+        timing_feedback = f"⚡ {abs(round(signed_diff))} min early! Great discipline."
+    elif signed_diff <= 5:
+        timing_feedback = "🎯 Right on time! Perfect execution."
+    else:
+        timing_feedback = f"⏰ {round(signed_diff)} min late."
+    
+    # XP percentage
+    xp_percent = round((earned_xp / payload.xp) * 100) if payload.xp > 0 else 0
+    
+    return {
+        "status": "completed",
+        "xp": user.xp,
+        "level": user.level,
+        "xp_earned": earned_xp,
+        "xp_base": payload.xp,
+        "xp_percent": xp_percent,
+        "time_diff_minutes": round(signed_diff, 1),
+        "timing_feedback": timing_feedback,
+        "completed_at": now.isoformat()
+    }
 
 @app.get("/api/v1/progress/{username}")
 def get_progress(username: str, db: Session = Depends(get_db)):

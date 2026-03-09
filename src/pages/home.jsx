@@ -45,7 +45,7 @@ import {
     Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis
 } from 'recharts'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FiPlus, FiTrash2, FiEdit2, FiCheckCircle, FiClock, FiMessageSquare, FiTrendingUp, FiSettings, FiActivity, FiSearch, FiSend, FiX, FiCheck, FiLayout, FiAward, FiUser, FiZap } from 'react-icons/fi'
+import { FiPlus, FiTrash2, FiEdit2, FiCheckCircle, FiClock, FiMessageSquare, FiTrendingUp, FiSettings, FiActivity, FiSearch, FiSend, FiX, FiCheck, FiLayout, FiAward, FiUser, FiZap, FiPlay, FiSquare } from 'react-icons/fi'
 import { calculateLevel, getXpForNextLevel } from '../utils/lifeEngine'
 import { getOracleResponse } from '../utils/oracleAgent'
 
@@ -59,6 +59,8 @@ export function Home() {
     const [level, setLevel] = useState(1)
     const [xp, setXp] = useState(0)
     const [completedQuests, setCompletedQuests] = useState([])
+    const [taskStates, setTaskStates] = useState({}) // { "05:00": { status: "pending"|"executing"|"completed", executed_at, completed_at, xp_earned, time_diff_minutes } }
+    const [completionFeedback, setCompletionFeedback] = useState(null) // { timing_feedback, xp_earned, xp_base, xp_percent }
     const [customTasks, setCustomTasks] = useState([])
     const [processStats, setProcessStats] = useState({ days: 0, weeks: 0, months: 0, years: 0 })
     const [progress, setProgress] = useState({ streak: 0, total_days_active: 0, total_tasks_completed: 0, history: [] })
@@ -95,6 +97,48 @@ export function Home() {
     const bgColor = useColorModeValue('gray.50', 'gray.900')
     const cardBg = useColorModeValue('white', 'gray.800')
 
+    // Helper to refresh daily state (tasks, focus, etc.)
+    const refreshDailyState = async (planData = null) => {
+        try {
+            // Refresh daily logs
+            const dailyRes = await fetch(`${API_BASE}/daily/${USERNAME}`)
+            const dailyData = await dailyRes.json()
+
+            // Build taskStates map and completedQuests
+            const newStates = {}
+            const completed = []
+            dailyData.forEach(d => {
+                newStates[d.task_time] = {
+                    status: d.status || (d.completed ? 'completed' : 'pending'),
+                    executed_at: d.executed_at,
+                    completed_at: d.completed_at,
+                    xp_earned: d.xp_earned,
+                    time_diff_minutes: d.time_diff_minutes
+                }
+                if (d.status === 'completed' || d.completed) {
+                    completed.push(d.task_time)
+                }
+            })
+            setTaskStates(newStates)
+            setCompletedQuests(completed)
+
+            // Refresh user state
+            const userRes = await fetch(`${API_BASE}/user/${USERNAME}`)
+            const userData = await userRes.json()
+            setLevel(userData.level)
+            setXp(userData.xp)
+
+            // Refresh progress
+            const progressRes = await fetch(`${API_BASE}/progress/${USERNAME}`)
+            setProgress(await progressRes.json())
+
+            return { dailyData, completed }
+        } catch (err) {
+            console.error('Refresh error:', err)
+            return { dailyData: [], completed: completedQuests }
+        }
+    }
+
     // Initial Sync & Hydration
     useEffect(() => {
         const hydrate = async () => {
@@ -110,10 +154,27 @@ export function Home() {
                 const chatData = await chatRes.json()
                 setMessages(chatData.map(m => ({ text: m.text, sender: m.sender })))
 
-                // 3. Get TODAY'S completed tasks (date-scoped, auto-resets daily)
+                // 3. Get TODAY'S task states (date-scoped, auto-resets daily)
                 const dailyRes = await fetch(`${API_BASE}/daily/${USERNAME}`)
                 const dailyData = await dailyRes.json()
-                setCompletedQuests(dailyData.map(d => d.task_time))
+
+                // Build taskStates map
+                const newStates = {}
+                const completed = []
+                dailyData.forEach(d => {
+                    newStates[d.task_time] = {
+                        status: d.status || (d.completed ? 'completed' : 'pending'),
+                        executed_at: d.executed_at,
+                        completed_at: d.completed_at,
+                        xp_earned: d.xp_earned,
+                        time_diff_minutes: d.time_diff_minutes
+                    }
+                    if (d.status === 'completed' || d.completed) {
+                        completed.push(d.task_time)
+                    }
+                })
+                setTaskStates(newStates)
+                setCompletedQuests(completed)
 
                 // 4. Initial AI Day Plan (Seeding / Healing)
                 const planRes = await fetch(`${API_BASE}/daily/${USERNAME}/plan`)
@@ -139,8 +200,8 @@ export function Home() {
                 const progressData = await progressRes.json()
                 setProgress(progressData)
 
-                // Find next incomplete quest (Uses sorted planData)
-                const nextQuest = planData.find(q => !dailyData.map(d => d.task_time).includes(q.time))
+                // Find next incomplete quest that is not already completed
+                const nextQuest = planData.find(q => !completed.includes(q.time) && !newStates[q.time]?.status?.includes('completed'))
                 setActiveQuest(nextQuest || planData[0] || null)
                 setIsLoading(false)
             } catch (err) {
@@ -157,9 +218,9 @@ export function Home() {
         }
     }, [messages, isOracleOpen])
 
-    const toggleTask = async (task) => {
+    const executeTask = async (task) => {
         try {
-            const res = await fetch(`${API_BASE}/daily/${USERNAME}/toggle`, {
+            const res = await fetch(`${API_BASE}/daily/${USERNAME}/execute`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -171,21 +232,83 @@ export function Home() {
             })
             const data = await res.json()
 
-            if (data.status === 'updated') {
-                if (data.completed) {
-                    setCompletedQuests(prev => [...prev, task.time])
-                } else {
-                    setCompletedQuests(prev => prev.filter(t => t !== task.time))
-                }
-                setXp(data.xp)
-                setLevel(data.level)
-                // Refresh progress after toggling
-                const progressRes = await fetch(`${API_BASE}/progress/${USERNAME}`)
-                setProgress(await progressRes.json())
+            if (data.status === 'executing' || data.status === 'already_executing') {
+                setTaskStates(prev => ({
+                    ...prev,
+                    [task.time]: {
+                        ...prev[task.time],
+                        status: 'executing',
+                        executed_at: data.executed_at
+                    }
+                }))
+                setCompletionFeedback(null)
             }
         } catch (err) {
-            console.error("Toggle Error:", err)
+            console.error("Execute Error:", err)
         }
+    }
+
+    const completeTask = async (task) => {
+        try {
+            const res = await fetch(`${API_BASE}/daily/${USERNAME}/complete`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    time: task.time,
+                    activity: task.activity,
+                    xp: task.xp || 50,
+                    is_custom: task.is_custom || false
+                })
+            })
+            const data = await res.json()
+
+            if (data.status === 'completed') {
+                setTaskStates(prev => ({
+                    ...prev,
+                    [task.time]: {
+                        ...prev[task.time],
+                        status: 'completed',
+                        completed_at: data.completed_at,
+                        xp_earned: data.xp_earned,
+                        time_diff_minutes: data.time_diff_minutes
+                    }
+                }))
+                setCompletedQuests(prev => [...prev, task.time])
+                setXp(data.xp)
+                setLevel(data.level)
+
+                // Show completion feedback
+                setCompletionFeedback({
+                    timing_feedback: data.timing_feedback,
+                    xp_earned: data.xp_earned,
+                    xp_base: data.xp_base,
+                    xp_percent: data.xp_percent,
+                    time_diff_minutes: data.time_diff_minutes
+                })
+
+                // Auto-refresh to next task after a delay
+                setTimeout(async () => {
+                    await refreshDailyState()
+                    // Find next incomplete task
+                    const nextQuest = allFixedTasks.find(q =>
+                        !completedQuests.includes(q.time) &&
+                        q.time !== task.time &&
+                        taskStates[q.time]?.status !== 'completed'
+                    )
+                    if (nextQuest) {
+                        setActiveQuest(nextQuest)
+                    }
+                    setCompletionFeedback(null)
+                }, 4000) // Show feedback for 4 seconds then move on
+            }
+        } catch (err) {
+            console.error("Complete Error:", err)
+        }
+    }
+
+    // Get status of a task
+    const getTaskStatus = (taskTime) => {
+        return taskStates[taskTime]?.status || 'pending'
     }
 
     const handleSendMessage = async (e) => {
@@ -336,10 +459,17 @@ export function Home() {
             const mStr = now.getMinutes().toString().padStart(2, '0')
             const currentStr = `${hStr}:${mStr}`
 
+            // Don't override if user is currently executing a task
+            const currentlyExecuting = allFixedTasks.find(t => getTaskStatus(t.time) === 'executing')
+            if (currentlyExecuting) {
+                setActiveQuest(prev => prev?.time !== currentlyExecuting.time ? currentlyExecuting : prev)
+                return
+            }
+
             // Intelligent Focus: 
             // 1. Find the most recent task that should have started but isn't completed.
             // 2. If all past tasks are done, show the first upcoming incomplete task.
-            const incompleteTasks = allFixedTasks.filter(t => !completedQuests.includes(t.time))
+            const incompleteTasks = allFixedTasks.filter(t => getTaskStatus(t.time) !== 'completed')
 
             if (incompleteTasks.length === 0) {
                 // If everything is done, just show the last overall task or first as anchor
@@ -362,7 +492,7 @@ export function Home() {
         syncFocusTime()
         const interval = setInterval(syncFocusTime, 60000) // Re-sync every minute
         return () => clearInterval(interval)
-    }, [allFixedTasks])
+    }, [allFixedTasks, taskStates])
 
     // Chart Data Preparation
     const auditData = [
@@ -482,24 +612,97 @@ export function Home() {
                                 <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={8}>
                                     <VStack spacing={6} align="stretch">
                                         <Box bg={cardBg} p={{ base: 8, lg: 12 }} borderRadius="3xl" shadow="xl" border="1px solid" borderColor="gray.100" position="relative" overflow="hidden">
+                                            {/* Completion Feedback Overlay */}
+                                            <AnimatePresence>
+                                                {completionFeedback && (
+                                                    <MotionBox
+                                                        position="absolute" inset={0} bg="blackAlpha.800" backdropFilter="blur(10px)" zIndex={10}
+                                                        display="flex" alignItems="center" justifyContent="center" borderRadius="3xl"
+                                                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                                                    >
+                                                        <VStack spacing={4} textAlign="center" p={8}>
+                                                            <Text fontSize="4xl">{completionFeedback.xp_percent >= 80 ? '🏆' : completionFeedback.xp_percent >= 50 ? '✅' : completionFeedback.xp_percent > 0 ? '⚠️' : '❌'}</Text>
+                                                            <Heading size="lg" color="white" fontWeight="900">{completionFeedback.timing_feedback}</Heading>
+                                                            <HStack spacing={4}>
+                                                                <Box bg="whiteAlpha.200" p={4} borderRadius="xl">
+                                                                    <Text fontSize="xs" color="whiteAlpha.700" fontWeight="800" textTransform="uppercase">XP Earned</Text>
+                                                                    <Text fontSize="2xl" fontWeight="900" color={completionFeedback.xp_percent >= 80 ? 'green.300' : completionFeedback.xp_percent >= 50 ? 'yellow.300' : 'red.300'}>+{completionFeedback.xp_earned}</Text>
+                                                                </Box>
+                                                                <Box bg="whiteAlpha.200" p={4} borderRadius="xl">
+                                                                    <Text fontSize="xs" color="whiteAlpha.700" fontWeight="800" textTransform="uppercase">Efficiency</Text>
+                                                                    <Text fontSize="2xl" fontWeight="900" color={completionFeedback.xp_percent >= 80 ? 'green.300' : completionFeedback.xp_percent >= 50 ? 'yellow.300' : 'red.300'}>{completionFeedback.xp_percent}%</Text>
+                                                                </Box>
+                                                            </HStack>
+                                                            <Text fontSize="xs" color="whiteAlpha.500">Auto-refreshing to next mission...</Text>
+                                                        </VStack>
+                                                    </MotionBox>
+                                                )}
+                                            </AnimatePresence>
+
                                             <VStack align="start" spacing={1} mb={8}>
-                                                <Badge colorScheme={activeQuest?.is_custom ? "purple" : "orange"} px={3} borderRadius="md" mb={2}>{activeQuest?.is_custom ? "CUSTOM MISSION" : "ACTIVE MISSION"}</Badge>
+                                                <Badge colorScheme={
+                                                    getTaskStatus(activeQuest?.time) === 'completed' ? 'green' :
+                                                        getTaskStatus(activeQuest?.time) === 'executing' ? 'orange' :
+                                                            activeQuest?.is_custom ? 'purple' : 'blue'
+                                                } px={3} borderRadius="md" mb={2}>
+                                                    {getTaskStatus(activeQuest?.time) === 'completed' ? 'MISSION COMPLETE' :
+                                                        getTaskStatus(activeQuest?.time) === 'executing' ? 'IN PROGRESS' :
+                                                            activeQuest?.is_custom ? 'CUSTOM MISSION' : 'ACTIVE MISSION'}
+                                                </Badge>
                                                 <Heading size="2xl" fontWeight="900" letterSpacing="-1.5px">{activeQuest?.activity || 'Calculating...'}</Heading>
                                                 <Text color="gray.500" fontWeight="700">Scheduled for {formatTime(activeQuest?.time)}</Text>
                                             </VStack>
                                             <SimpleGrid columns={2} spacing={4} mb={10}>
                                                 <Box bg="gray.50" p={5} borderRadius="2xl">
-                                                    <Text fontSize="10px" fontWeight="900" color="gray.400" textTransform="uppercase" mb={1}>Reward</Text>
+                                                    <Text fontSize="10px" fontWeight="900" color="gray.400" textTransform="uppercase" mb={1}>Max Reward</Text>
                                                     <HStack color="orange.500" fontWeight="900"><Icon as={FiZap} /><Text fontSize="xl">+{activeQuest?.xp || 0} XP</Text></HStack>
                                                 </Box>
                                                 <Box bg="gray.50" p={5} borderRadius="2xl">
-                                                    <Text fontSize="10px" fontWeight="900" color="gray.400" textTransform="uppercase" mb={1}>Time</Text>
-                                                    <HStack color="blue.500" fontWeight="900"><Icon as={FiClock} /><Text fontSize="xl">{formatTime(activeQuest?.time)}</Text></HStack>
+                                                    <Text fontSize="10px" fontWeight="900" color="gray.400" textTransform="uppercase" mb={1}>
+                                                        {getTaskStatus(activeQuest?.time) === 'executing' ? 'Status' : 'Time'}
+                                                    </Text>
+                                                    <HStack color={getTaskStatus(activeQuest?.time) === 'executing' ? 'orange.500' : 'blue.500'} fontWeight="900">
+                                                        <Icon as={getTaskStatus(activeQuest?.time) === 'executing' ? FiPlay : FiClock} />
+                                                        <Text fontSize="xl">
+                                                            {getTaskStatus(activeQuest?.time) === 'executing' ? 'Running...' : formatTime(activeQuest?.time)}
+                                                        </Text>
+                                                    </HStack>
                                                 </Box>
                                             </SimpleGrid>
-                                            <Button w="full" size="lg" h="72px" colorScheme={completedQuests.includes(activeQuest?.time) ? "green" : "blue"} borderRadius="2xl" fontSize="xl" fontWeight="900" onClick={() => activeQuest && toggleTask(activeQuest)}>
-                                                {completedQuests.includes(activeQuest?.time) ? "MISSION SECURED" : "EXECUTE TASK"}
-                                            </Button>
+
+                                            {/* DUAL BUTTON: Execute → Complete Flow */}
+                                            {(() => {
+                                                const status = getTaskStatus(activeQuest?.time)
+                                                if (status === 'completed') {
+                                                    return (
+                                                        <Button w="full" size="lg" h="72px" colorScheme="green" borderRadius="2xl" fontSize="xl" fontWeight="900" isDisabled cursor="default" opacity={0.8}>
+                                                            ✅ MISSION SECURED
+                                                        </Button>
+                                                    )
+                                                } else if (status === 'executing') {
+                                                    return (
+                                                        <Button w="full" size="lg" h="72px" colorScheme="green" borderRadius="2xl" fontSize="xl" fontWeight="900"
+                                                            onClick={() => activeQuest && completeTask(activeQuest)}
+                                                            leftIcon={<FiSquare />}
+                                                            _hover={{ transform: 'scale(1.02)', shadow: '2xl' }}
+                                                            transition="all 0.2s"
+                                                        >
+                                                            COMPLETE TASK
+                                                        </Button>
+                                                    )
+                                                } else {
+                                                    return (
+                                                        <Button w="full" size="lg" h="72px" colorScheme="blue" borderRadius="2xl" fontSize="xl" fontWeight="900"
+                                                            onClick={() => activeQuest && executeTask(activeQuest)}
+                                                            leftIcon={<FiPlay />}
+                                                            _hover={{ transform: 'scale(1.02)', shadow: '2xl' }}
+                                                            transition="all 0.2s"
+                                                        >
+                                                            EXECUTE TASK
+                                                        </Button>
+                                                    )
+                                                }
+                                            })()}
                                         </Box>
                                     </VStack>
 
@@ -516,7 +719,7 @@ export function Home() {
                                 </SimpleGrid>
                             </TabPanel>
 
-                            {/* LOG TAB */}
+                            {/* LOG TAB — Read-Only Status View */}
                             <TabPanel p={0}>
                                 <HStack justify="space-between" mb={6}>
                                     <Heading size="md" color="gray.700">Operations Log</Heading>
@@ -531,19 +734,55 @@ export function Home() {
                                         <Box key={period} mb={8}>
                                             <Heading size="sm" color="gray.500" mb={4} textTransform="uppercase" letterSpacing="1px">{period} Protocol</Heading>
                                             <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
-                                                {periodTasks.map((task, i) => (
-                                                    <MotionBox key={`${period}-${i}`} bg={cardBg} p={5} borderRadius="2xl" shadow="sm" border="1px solid" borderColor={completedQuests.includes(task.time) ? "green.100" : task.is_custom ? "purple.100" : "gray.50"} cursor="pointer" onClick={() => toggleTask(task)} whileHover={{ x: 5 }} opacity={completedQuests.includes(task.time) ? 0.6 : 1}>
-                                                        <HStack spacing={4}>
-                                                            <Circle size="10" bg={completedQuests.includes(task.time) ? "green.500" : task.is_custom ? "purple.500" : "gray.100"} color={completedQuests.includes(task.time) || task.is_custom ? "white" : "gray.400"}><Icon as={FiCheckCircle} /></Circle>
-                                                            <VStack align="start" spacing={0} flex={1}><Text fontWeight="800" fontSize="lg">{task.activity}</Text><Text fontSize="xs" fontWeight="900" color="gray.400">{formatTime(task.time)}</Text></VStack>
-                                                            <HStack flexShrink={0}>
-                                                                <Badge colorScheme={task.is_custom ? "purple" : "blue"}>+{task.xp}XP</Badge>
-                                                                <IconButton icon={<FiEdit2 />} size="xs" variant="ghost" onClick={(e) => openEditModal(task, e)} aria-label="Edit" />
-                                                                <IconButton icon={<FiTrash2 />} size="xs" variant="ghost" colorScheme="red" onClick={(e) => handleDeleteTask(task, e)} aria-label="Delete" />
+                                                {periodTasks.map((task, i) => {
+                                                    const status = getTaskStatus(task.time)
+                                                    const state = taskStates[task.time]
+                                                    const isCompleted = status === 'completed'
+                                                    const isExecuting = status === 'executing'
+                                                    return (
+                                                        <MotionBox key={`${period}-${i}`} bg={cardBg} p={5} borderRadius="2xl" shadow="sm" border="1px solid"
+                                                            borderColor={isCompleted ? "green.100" : isExecuting ? "orange.100" : task.is_custom ? "purple.100" : "gray.50"}
+                                                            opacity={isCompleted ? 0.7 : 1}
+                                                            whileHover={{ x: 3 }}
+                                                        >
+                                                            <HStack spacing={4}>
+                                                                <Circle size="10"
+                                                                    bg={isCompleted ? "green.500" : isExecuting ? "orange.500" : task.is_custom ? "purple.500" : "gray.100"}
+                                                                    color={isCompleted || isExecuting || task.is_custom ? "white" : "gray.400"}
+                                                                >
+                                                                    <Icon as={isCompleted ? FiCheckCircle : isExecuting ? FiPlay : FiClock} />
+                                                                </Circle>
+                                                                <VStack align="start" spacing={0} flex={1}>
+                                                                    <Text fontWeight="800" fontSize="lg" textDecoration={isCompleted ? 'line-through' : 'none'}>{task.activity}</Text>
+                                                                    <HStack spacing={2}>
+                                                                        <Text fontSize="xs" fontWeight="900" color="gray.400">{formatTime(task.time)}</Text>
+                                                                        {isCompleted && state?.xp_earned !== undefined && (
+                                                                            <Badge colorScheme={state.xp_earned >= task.xp * 0.8 ? 'green' : state.xp_earned >= task.xp * 0.5 ? 'yellow' : 'red'} fontSize="9px">
+                                                                                +{state.xp_earned}XP ({Math.round((state.xp_earned / task.xp) * 100)}%)
+                                                                            </Badge>
+                                                                        )}
+                                                                        {isCompleted && state?.time_diff_minutes !== undefined && (
+                                                                            <Text fontSize="9px" fontWeight="800" color={state.time_diff_minutes <= 5 ? 'green.500' : state.time_diff_minutes <= 30 ? 'yellow.600' : 'red.500'}>
+                                                                                {state.time_diff_minutes < -5 ? `${Math.abs(Math.round(state.time_diff_minutes))}m early` :
+                                                                                    state.time_diff_minutes <= 5 ? 'on time' :
+                                                                                        `${Math.round(state.time_diff_minutes)}m late`}
+                                                                            </Text>
+                                                                        )}
+                                                                    </HStack>
+                                                                </VStack>
+                                                                <HStack flexShrink={0}>
+                                                                    <Badge colorScheme={
+                                                                        isCompleted ? 'green' : isExecuting ? 'orange' : task.is_custom ? 'purple' : 'blue'
+                                                                    } fontSize="10px">
+                                                                        {isCompleted ? '✅ Done' : isExecuting ? '▶ Running' : `+${task.xp}XP`}
+                                                                    </Badge>
+                                                                    <IconButton icon={<FiEdit2 />} size="xs" variant="ghost" onClick={(e) => openEditModal(task, e)} aria-label="Edit" />
+                                                                    <IconButton icon={<FiTrash2 />} size="xs" variant="ghost" colorScheme="red" onClick={(e) => handleDeleteTask(task, e)} aria-label="Delete" />
+                                                                </HStack>
                                                             </HStack>
-                                                        </HStack>
-                                                    </MotionBox>
-                                                ))}
+                                                        </MotionBox>
+                                                    )
+                                                })}
                                             </SimpleGrid>
                                         </Box>
                                     )
