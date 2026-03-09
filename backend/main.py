@@ -10,6 +10,13 @@ from dotenv import load_dotenv
 from typing import List
 import datetime
 
+def get_local_now():
+    """Returns local time for UTC+05:45 (Nepal)"""
+    return datetime.datetime.utcnow() + datetime.timedelta(hours=5, minutes=45)
+
+def get_local_today():
+    return get_local_now().date()
+
 load_dotenv()
 
 app = FastAPI(title="Life RPG API")
@@ -129,7 +136,7 @@ def get_today_completions(username: str, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.username == username).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    today = datetime.date.today()
+    today = get_local_today()
     logs = db.query(models.DailyLog).filter(
         models.DailyLog.user_id == user.id,
         models.DailyLog.date == today
@@ -195,8 +202,8 @@ def execute_task(username: str, payload: ToggleTaskRequest, db: Session = Depend
     user = db.query(models.User).filter(models.User.username == username).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    today = datetime.date.today()
-    now = datetime.datetime.now()
+    today = get_local_today()
+    now = get_local_now()
     
     # Check if already exists for today
     log = db.query(models.DailyLog).filter(
@@ -242,8 +249,8 @@ def complete_task(username: str, payload: ToggleTaskRequest, db: Session = Depen
     user = db.query(models.User).filter(models.User.username == username).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    today = datetime.date.today()
-    now = datetime.datetime.now()
+    today = get_local_today()
+    now = get_local_now()
     
     log = db.query(models.DailyLog).filter(
         models.DailyLog.user_id == user.id,
@@ -327,7 +334,7 @@ def get_progress(username: str, db: Session = Depends(get_db)):
     
     # Streak calculation
     streak = 0
-    today = datetime.date.today()
+    today = get_local_today()
     for i in range(1000):
         check = today - datetime.timedelta(days=i)
         if str(check) in by_date:
