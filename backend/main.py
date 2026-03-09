@@ -159,7 +159,17 @@ def calculate_fair_xp(base_xp: int, scheduled_time: str, completed_at: datetime.
     try:
         h, m = map(int, scheduled_time.split(':'))
         scheduled_dt = completed_at.replace(hour=h, minute=m, second=0, microsecond=0)
-        diff_minutes = abs((completed_at - scheduled_dt).total_seconds() / 60)
+        
+        # Raw difference in minutes
+        signed_diff = (completed_at - scheduled_dt).total_seconds() / 60
+        
+        # Handle midnight crossovers (e.g. 23:00 task done at 00:30 next day = -1350 mins)
+        if signed_diff < -720:    # More than 12h "early" usually means they crossed midnight and are late
+            signed_diff += 1440
+        elif signed_diff > 720:   # More than 12h "late" usually means they did it early the night before
+            signed_diff -= 1440
+            
+        diff_minutes = abs(signed_diff)
         
         if diff_minutes <= 15:
             multiplier = 1.0
@@ -173,7 +183,7 @@ def calculate_fair_xp(base_xp: int, scheduled_time: str, completed_at: datetime.
             multiplier = 0.0
         
         earned = int(base_xp * multiplier)
-        return earned, diff_minutes, (completed_at - scheduled_dt).total_seconds() / 60
+        return earned, diff_minutes, signed_diff
     except Exception as e:
         print(f"Fair XP calc error: {e}")
         return base_xp, 0, 0
