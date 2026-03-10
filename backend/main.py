@@ -219,6 +219,9 @@ def execute_task(username: str, payload: ToggleTaskRequest, db: Session = Depend
             "message": "Task is already in progress or completed."
         }
     
+    # Calculate starting punctuality and XP potential immediately
+    earned_xp, abs_diff, signed_diff = calculate_fair_xp(payload.xp, payload.time, now)
+    
     if not log:
         log = models.DailyLog(
             user_id=user.id,
@@ -228,17 +231,32 @@ def execute_task(username: str, payload: ToggleTaskRequest, db: Session = Depend
             date=today,
             completed=False,
             status="executing",
-            executed_at=now
+            executed_at=now,
+            xp_earned=earned_xp,
+            time_diff_minutes=round(signed_diff, 1)
         )
         db.add(log)
     else:
         log.status = "executing"
         log.executed_at = now
+        log.xp_earned = earned_xp
+        log.time_diff_minutes = round(signed_diff, 1)
     
     db.commit()
+    
+    # Determine start-time feedback
+    if signed_diff < -5:
+        start_feedback = f"⚡ Started {abs(round(signed_diff))} min early!"
+    elif signed_diff <= 5:
+        start_feedback = "🎯 Started right on time!"
+    else:
+        start_feedback = f"⏰ Started {round(signed_diff)} min late."
+
     return {
         "status": "executing",
         "executed_at": now.isoformat(),
+        "xp_potential": earned_xp,
+        "start_feedback": start_feedback,
         "message": "Task execution started."
     }
 
@@ -267,17 +285,16 @@ def complete_task(username: str, payload: ToggleTaskRequest, db: Session = Depen
             "message": "Task was already completed."
         }
     
-    # Calculate fair XP
-    earned_xp, abs_diff, signed_diff = calculate_fair_xp(payload.xp, payload.time, now)
+    # Calculate duration
+    duration = (now - log.executed_at).total_seconds() / 60
     
     log.status = "completed"
     log.completed = True
     log.completed_at = now
-    log.xp_earned = earned_xp
-    log.time_diff_minutes = round(signed_diff, 1)
+    log.duration_minutes = round(duration, 1)
     
-    # Award the fairly calculated XP
-    user.xp += earned_xp
+    # Award the already calculated fair XP
+    user.xp += log.xp_earned
     
     # Level Up Logic
     new_level = int((user.xp / 100)**0.5) + 1
@@ -285,26 +302,30 @@ def complete_task(username: str, payload: ToggleTaskRequest, db: Session = Depen
     
     db.commit()
     
-    # Determine early/late feedback
+    # Formatting feedback
+    signed_diff = log.time_diff_minutes
     if signed_diff < -5:
-        timing_feedback = f"⚡ {abs(round(signed_diff))} min early! Great discipline."
+        timing_feedback = f"⚡ {abs(round(signed_diff))} min early start!"
     elif signed_diff <= 5:
-        timing_feedback = "🎯 Right on time! Perfect execution."
+        timing_feedback = "🎯 Perfect on-time start!"
     else:
-        timing_feedback = f"⏰ {round(signed_diff)} min late."
+        timing_feedback = f"⏰ {round(signed_diff)} min late start."
+    
+    duration_feedback = f"⏱️ Took {round(duration)} min to complete."
     
     # XP percentage
-    xp_percent = round((earned_xp / payload.xp) * 100) if payload.xp > 0 else 0
+    xp_percent = round((log.xp_earned / payload.xp) * 100) if payload.xp > 0 else 0
     
     return {
         "status": "completed",
         "xp": user.xp,
         "level": user.level,
-        "xp_earned": earned_xp,
+        "xp_earned": log.xp_earned,
         "xp_base": payload.xp,
         "xp_percent": xp_percent,
-        "time_diff_minutes": round(signed_diff, 1),
+        "duration_minutes": round(duration, 1),
         "timing_feedback": timing_feedback,
+        "duration_feedback": duration_feedback,
         "completed_at": now.isoformat()
     }
 

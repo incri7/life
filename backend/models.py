@@ -42,7 +42,8 @@ class DailyLog(Base):
     status = Column(String, default="pending")      # pending / executing / completed
     executed_at = Column(DateTime, nullable=True)    # When user clicked Execute
     completed_at = Column(DateTime, nullable=True)   # When user clicked Complete
-    time_diff_minutes = Column(Float, nullable=True) # Diff from scheduled time (negative=early, positive=late)
+    time_diff_minutes = Column(Float, nullable=True) # Start Delay: Diff from scheduled time
+    duration_minutes = Column(Float, nullable=True)  # How long the task took to complete
     owner = relationship("User", back_populates="daily_logs")
 
 class ChatHistory(Base):

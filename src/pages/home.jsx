@@ -64,6 +64,7 @@ export function Home() {
     const [customTasks, setCustomTasks] = useState([])
     const [processStats, setProcessStats] = useState({ days: 0, weeks: 0, months: 0, years: 0 })
     const [progress, setProgress] = useState({ streak: 0, total_days_active: 0, total_tasks_completed: 0, history: [] })
+    const [liveDuration, setLiveDuration] = useState(0) // Seconds since executed_at
 
     const [schedule, setSchedule] = useState({ fixed: [], flexible: [] })
     const [activeQuest, setActiveQuest] = useState(null)
@@ -138,6 +139,24 @@ export function Home() {
             return { dailyData: [], completed: completedQuests }
         }
     }
+
+    // Live Timer for Executing Task
+    useEffect(() => {
+        const executing = allFixedTasks.find(t => getTaskStatus(t.time) === 'executing')
+        if (!executing || !taskStates[executing.time]?.executed_at) {
+            setLiveDuration(0)
+            return
+        }
+
+        const interval = setInterval(() => {
+            const start = new Date(taskStates[executing.time].executed_at)
+            const now = new Date()
+            const diff = Math.floor((now - start) / 1000)
+            setLiveDuration(diff > 0 ? diff : 0)
+        }, 1000)
+
+        return () => clearInterval(interval)
+    }, [allFixedTasks, taskStates])
 
     // Initial Sync & Hydration
     useEffect(() => {
@@ -238,7 +257,8 @@ export function Home() {
                     [task.time]: {
                         ...prev[task.time],
                         status: 'executing',
-                        executed_at: data.executed_at
+                        executed_at: data.executed_at,
+                        start_feedback: data.start_feedback
                     }
                 }))
                 setCompletionFeedback(null)
@@ -270,16 +290,19 @@ export function Home() {
                         status: 'completed',
                         completed_at: data.completed_at,
                         xp_earned: data.xp_earned,
-                        time_diff_minutes: data.time_diff_minutes
+                        time_diff_minutes: data.time_diff_minutes,
+                        duration_minutes: data.duration_minutes
                     }
                 }))
                 setCompletedQuests(prev => [...prev, task.time])
                 setXp(data.xp)
                 setLevel(data.level)
+                setLiveDuration(0) // Reset timer
 
                 // Show completion feedback
                 setCompletionFeedback({
                     timing_feedback: data.timing_feedback,
+                    duration_feedback: data.duration_feedback,
                     xp_earned: data.xp_earned,
                     xp_base: data.xp_base,
                     xp_percent: data.xp_percent,
@@ -430,6 +453,12 @@ export function Home() {
         const ampm = h >= 12 ? 'PM' : 'AM'
         const h12 = h % 12 || 12
         return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`
+    }
+
+    const formatDuration = (seconds) => {
+        const m = Math.floor(seconds / 60)
+        const s = seconds % 60
+        return `${m}:${s.toString().padStart(2, '0')}`
     }
 
     // Assign period to any task that doesn't have one (e.g., Oracle-added custom tasks)
@@ -623,6 +652,7 @@ export function Home() {
                                                         <VStack spacing={4} textAlign="center" p={8}>
                                                             <Text fontSize="4xl">{completionFeedback.xp_percent >= 80 ? '🏆' : completionFeedback.xp_percent >= 50 ? '✅' : completionFeedback.xp_percent > 0 ? '⚠️' : '❌'}</Text>
                                                             <Heading size="lg" color="white" fontWeight="900">{completionFeedback.timing_feedback}</Heading>
+                                                            <Text color="whiteAlpha.800" fontWeight="700" fontSize="md">{completionFeedback.duration_feedback}</Text>
                                                             <HStack spacing={4}>
                                                                 <Box bg="whiteAlpha.200" p={4} borderRadius="xl">
                                                                     <Text fontSize="xs" color="whiteAlpha.700" fontWeight="800" textTransform="uppercase">XP Earned</Text>
@@ -650,21 +680,26 @@ export function Home() {
                                                             activeQuest?.is_custom ? 'CUSTOM MISSION' : 'ACTIVE MISSION'}
                                                 </Badge>
                                                 <Heading size="2xl" fontWeight="900" letterSpacing="-1.5px">{activeQuest?.activity || 'Calculating...'}</Heading>
-                                                <Text color="gray.500" fontWeight="700">Scheduled for {formatTime(activeQuest?.time)}</Text>
+                                                <HStack spacing={2}>
+                                                    <Text color="gray.500" fontWeight="700">Scheduled for {formatTime(activeQuest?.time)}</Text>
+                                                    {getTaskStatus(activeQuest?.time) === 'executing' && taskStates[activeQuest?.time]?.start_feedback && (
+                                                        <Text color="orange.500" fontWeight="800" fontSize="xs">• {taskStates[activeQuest?.time].start_feedback}</Text>
+                                                    )}
+                                                </HStack>
                                             </VStack>
                                             <SimpleGrid columns={2} spacing={4} mb={10}>
                                                 <Box bg="gray.50" p={5} borderRadius="2xl">
-                                                    <Text fontSize="10px" fontWeight="900" color="gray.400" textTransform="uppercase" mb={1}>Max Reward</Text>
+                                                    <Text fontSize="10px" fontWeight="900" color="gray.400" textTransform="uppercase" mb={1}>Potential Reward</Text>
                                                     <HStack color="orange.500" fontWeight="900"><Icon as={FiZap} /><Text fontSize="xl">+{activeQuest?.xp || 0} XP</Text></HStack>
                                                 </Box>
                                                 <Box bg="gray.50" p={5} borderRadius="2xl">
                                                     <Text fontSize="10px" fontWeight="900" color="gray.400" textTransform="uppercase" mb={1}>
-                                                        {getTaskStatus(activeQuest?.time) === 'executing' ? 'Status' : 'Time'}
+                                                        {getTaskStatus(activeQuest?.time) === 'executing' ? 'Time Taken' : 'Start Time'}
                                                     </Text>
                                                     <HStack color={getTaskStatus(activeQuest?.time) === 'executing' ? 'orange.500' : 'blue.500'} fontWeight="900">
-                                                        <Icon as={getTaskStatus(activeQuest?.time) === 'executing' ? FiPlay : FiClock} />
+                                                        <Icon as={getTaskStatus(activeQuest?.time) === 'executing' ? FiClock : FiClock} />
                                                         <Text fontSize="xl">
-                                                            {getTaskStatus(activeQuest?.time) === 'executing' ? 'Running...' : formatTime(activeQuest?.time)}
+                                                            {getTaskStatus(activeQuest?.time) === 'executing' ? formatDuration(liveDuration) : formatTime(activeQuest?.time)}
                                                         </Text>
                                                     </HStack>
                                                 </Box>
