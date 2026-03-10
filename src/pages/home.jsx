@@ -49,7 +49,33 @@ import { FiPlus, FiTrash2, FiEdit2, FiCheckCircle, FiClock, FiMessageSquare, FiT
 import { calculateLevel, getXpForNextLevel } from '../utils/lifeEngine'
 import { getOracleResponse } from '../utils/oracleAgent'
 
-const MotionBox = motion.create(Box)
+const MotionBox = motion(Box)
+
+/**
+ * Helper Functions (Stateless)
+ */
+const formatTime = (t) => {
+    if (!t) return ''
+    const [h, m] = t.split(':').map(Number)
+    const ampm = h >= 12 ? 'PM' : 'AM'
+    const h12 = h % 12 || 12
+    return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`
+}
+
+const formatDuration = (seconds) => {
+    const m = Math.floor(seconds / 60)
+    const s = seconds % 60
+    return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+const withPeriod = (task) => {
+    if (task.period) return task
+    const h = parseInt((task.time || '00:00').split(':')[0], 10)
+    let period = 'Morning'
+    if (h >= 12 && h < 17) period = 'Afternoon'
+    if (h >= 17 || h < 4) period = 'Evening'
+    return { ...task, period }
+}
 
 const API_BASE = import.meta.env["VITE_X_7ea54382_7b12_4f3d_9c3a_1e4d5f6a7b8c"] || "http://localhost:8000/api/v1"
 const USERNAME = "incri"
@@ -139,24 +165,6 @@ export function Home() {
             return { dailyData: [], completed: completedQuests }
         }
     }
-
-    // Live Timer for Executing Task
-    useEffect(() => {
-        const executing = allFixedTasks.find(t => getTaskStatus(t.time) === 'executing')
-        if (!executing || !taskStates[executing.time]?.executed_at) {
-            setLiveDuration(0)
-            return
-        }
-
-        const interval = setInterval(() => {
-            const start = new Date(taskStates[executing.time].executed_at)
-            const now = new Date()
-            const diff = Math.floor((now - start) / 1000)
-            setLiveDuration(diff > 0 ? diff : 0)
-        }, 1000)
-
-        return () => clearInterval(interval)
-    }, [allFixedTasks, taskStates])
 
     // Initial Sync & Hydration
     useEffect(() => {
@@ -446,37 +454,30 @@ export function Home() {
     const maxXp = getXpForNextLevel(level)
     const progressPercent = (xp / maxXp) * 100
 
-    // Format 24hr time to 12hr AM/PM: "05:00" -> "5:00 AM"
-    const formatTime = (t) => {
-        if (!t) return ''
-        const [h, m] = t.split(':').map(Number)
-        const ampm = h >= 12 ? 'PM' : 'AM'
-        const h12 = h % 12 || 12
-        return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`
-    }
-
-    const formatDuration = (seconds) => {
-        const m = Math.floor(seconds / 60)
-        const s = seconds % 60
-        return `${m}:${s.toString().padStart(2, '0')}`
-    }
-
-    // Assign period to any task that doesn't have one (e.g., Oracle-added custom tasks)
-    const withPeriod = (task) => {
-        if (task.period) return task
-        const h = parseInt((task.time || '00:00').split(':')[0], 10)
-        let period = 'Morning'
-        if (h >= 12 && h < 17) period = 'Afternoon'
-        if (h >= 17 || h < 4) period = 'Evening'
-        return { ...task, period }
-    }
-
     // Merge MD schedule with custom DB tasks
     const allFixedTasks = React.useMemo(() => {
         return [...schedule.fixed, ...customTasks]
             .map(withPeriod)
             .sort((a, b) => a.time.localeCompare(b.time))
     }, [schedule.fixed, customTasks])
+
+    // Live Timer for Executing Task
+    useEffect(() => {
+        const executing = allFixedTasks.find(t => getTaskStatus(t.time) === 'executing')
+        if (!executing || !taskStates[executing.time]?.executed_at) {
+            setLiveDuration(0)
+            return
+        }
+
+        const interval = setInterval(() => {
+            const start = new Date(taskStates[executing.time].executed_at)
+            const now = new Date()
+            const diff = Math.floor((now - start) / 1000)
+            setLiveDuration(diff > 0 ? diff : 0)
+        }, 1000)
+
+        return () => clearInterval(interval)
+    }, [allFixedTasks, taskStates])
 
     // Time-based Focus Sync (Updates Active Mission automatically based on clock)
     useEffect(() => {
