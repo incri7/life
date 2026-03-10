@@ -48,7 +48,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { FiPlus, FiTrash2, FiEdit2, FiCheckCircle, FiClock, FiMessageSquare, FiTrendingUp, FiSettings, FiActivity, FiSearch, FiSend, FiX, FiCheck, FiLayout, FiAward, FiUser, FiZap, FiPlay, FiSquare } from 'react-icons/fi'
 import { calculateLevel, getXpForNextLevel } from '../utils/lifeEngine'
 import { getOracleResponse } from '../utils/oracleAgent'
-import { requestNotificationPermission, showLocalNotification } from '../utils/notificationService'
+import { requestNotificationPermission, showLocalNotification, playMissionSound, ensureAudioUnlocked } from '../utils/notificationService'
 
 const MotionBox = motion(Box)
 
@@ -509,7 +509,8 @@ export function Home() {
             // Notification Trigger
             incompleteTasks.forEach(task => {
                 if (task.time === currentStr && !notifiedTasks.current.has(task.time)) {
-                    showLocalNotification("Mission Objective Active!", `Time for ${task.activity}.`);
+                    showLocalNotification(`Mission: ${task.activity}`, "Sector priority updated. Deployment recommended via Oracle HUD.");
+                    playMissionSound();
                     notifiedTasks.current.add(task.time);
                 }
             });
@@ -603,6 +604,7 @@ export function Home() {
                     size="sm"
                     borderRadius="xl"
                     onClick={async () => {
+                        ensureAudioUnlocked();
                         const granted = await requestNotificationPermission();
                         if (granted) window.location.reload(); // Refresh to update UI state
                     }}
