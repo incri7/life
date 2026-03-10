@@ -48,6 +48,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { FiPlus, FiTrash2, FiEdit2, FiCheckCircle, FiClock, FiMessageSquare, FiTrendingUp, FiSettings, FiActivity, FiSearch, FiSend, FiX, FiCheck, FiLayout, FiAward, FiUser, FiZap, FiPlay, FiSquare } from 'react-icons/fi'
 import { calculateLevel, getXpForNextLevel } from '../utils/lifeEngine'
 import { getOracleResponse } from '../utils/oracleAgent'
+import { requestNotificationPermission, showLocalNotification } from '../utils/notificationService'
 
 const MotionBox = motion(Box)
 
@@ -106,6 +107,7 @@ export function Home() {
     const [messages, setMessages] = useState([])
     const [inputText, setInputText] = useState("")
     const chatEndRef = useRef(null)
+    const notifiedTasks = useRef(new Set()) // Track tasks alerted today
 
     const [tabIndex, setTabIndex] = useState(() => {
         try { return parseInt(localStorage.getItem('activeTab') || '0', 10) } catch { return 0 }
@@ -237,6 +239,9 @@ export function Home() {
             }
         }
         hydrate()
+
+        // Request notification permission
+        requestNotificationPermission()
     }, [])
 
     useEffect(() => {
@@ -501,6 +506,14 @@ export function Home() {
             // 2. If all past tasks are done, show the first upcoming incomplete task.
             const incompleteTasks = allFixedTasks.filter(t => getTaskStatus(t.time) !== 'completed')
 
+            // Notification Trigger
+            incompleteTasks.forEach(task => {
+                if (task.time === currentStr && !notifiedTasks.current.has(task.time)) {
+                    showLocalNotification("Mission Objective Active!", `Time for ${task.activity}.`);
+                    notifiedTasks.current.add(task.time);
+                }
+            });
+
             if (incompleteTasks.length === 0) {
                 // If everything is done, just show the last overall task or first as anchor
                 setActiveQuest(allFixedTasks[allFixedTasks.length - 1] || allFixedTasks[0])
@@ -581,6 +594,22 @@ export function Home() {
                 <Progress value={progressPercent} size="xs" colorScheme="blue" borderRadius="full" mb={2} />
                 <Text fontSize="10px" fontWeight="800" color="gray.500">{xp} / {maxXp} XP</Text>
             </Box>
+
+            {Notification.permission !== 'granted' && (
+                <Button
+                    leftIcon={<FiZap />}
+                    colorScheme="orange"
+                    variant="outline"
+                    size="sm"
+                    borderRadius="xl"
+                    onClick={async () => {
+                        const granted = await requestNotificationPermission();
+                        if (granted) window.location.reload(); // Refresh to update UI state
+                    }}
+                >
+                    Enable Alerts
+                </Button>
+            )}
 
             <Button leftIcon={<FiMessageSquare />} colorScheme="blue" shadow="lg" onClick={onOracleOpen}>Oracle HUD</Button>
         </VStack>

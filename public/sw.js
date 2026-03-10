@@ -68,3 +68,27 @@ self.addEventListener('fetch', (event) => {
         })
     );
 });
+
+// Handle Notification Clicks
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+
+    const urlToOpen = new URL(self.location.origin).href;
+
+    event.waitUntil(
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+            // If a window is already open, focus it
+            for (let i = 0; i < windowClients.length; i++) {
+                const client = windowClients[i];
+                if (client.url === urlToOpen && 'focus' in client) {
+                    return client.focus();
+                }
+            }
+            // If no window is open, open a new one
+            if (clients.openWindow) {
+                return clients.openWindow(urlToOpen);
+            }
+        })
+    );
+});
+
